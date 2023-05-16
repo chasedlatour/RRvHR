@@ -1,0 +1,386 @@
+---
+title: "RR v HR Rmd"
+author: "Chase Latour"
+date: "3/9/2023"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Call needed libraries
+library(tidyverse)
+library(survival)
+library(haven)
+library(muhaz)
+library(survival)
+library(biostat3)
+library(survRM2)
+library(dplyr)
+library(kableExtra)
+```
+
+# Call in the data
+
+Call in the data from the server. These data are publicly accessible through Project Data Sphere but require a signed data use agreement, so we do not provide them here.
+
+```{r}
+
+raw_data <- read_sas("/local/projects/DETECTe/data/raw/mCRC_WT/analysis/cohort.sas7bdat")
+
+```
+
+# Clean the dataset
+
+Here we first check the maximum amount of follow-up in each treatment arm.
+
+```{r}
+
+# Look at the maximum amount of follow-up in each treatment arm.
+raw_data %>% 
+  group_by(trt) %>% 
+  summarize(maximum = max(days)) %>% 
+  kbl() %>% 
+  kable_styling()
+
+```
+
+The maximum amount of follow-up in the untreated is 1,310 days, while the maximum follow-up in the treated is 1,252. We want the same amount of follow-up, so we limit the follow-up for 1,252 days for each person in the analysis.
+
+```{r}
+
+# Want to have a uniform amount of follow-up across the treatment groups, particularly for the non-parametric analyses.
+mCRC <- raw_data %>% 
+  mutate(days = ifelse(days > 1252, 1252, days),
+         event = ifelse(days > 1252, 0, event))
+
+```
+
+
+# Calculate final HR
+
+We use a Cox proportional hazards model to calculate the HR estimate at 1,252 days of follow-up.
+
+**HR = 0.82 (95% CI: 0.71, 0.93)**
+
+```{r}
+
+cox <- coxph(formula = Surv(days, event) ~ trt, data=mCRC)
+
+summary(cox)
+
+
+
+```
+
+# Calculate final RR
+
+We want to calculate the RR at 1,252 days of follow-up for comparison with the HR.
+
+## Function to calculate the RR at a specific point in FUP
+
+This function allows users to calculate the risk ratio at user-specified point in follow-up: `fup_days`.
+
+```{r}
+
+RR_calc <- function(fup_days, km_model){
+  
+  summary_km <- summary(km_model, times = fup_days)
+  
+  kmdat <- data.frame(summary_km[c("surv","time","std.err","strata")])
+  
+  data <- kmdat %>% 
+    mutate(r = 1-surv,
+           RR = r/lag(r), 
+           r0= first(r), r1 = last(r),
+           se0 = first(std.err), se1 = last(std.err),
+           selnrr = sqrt((1/r0)^2 * se0^2 + (1/r1)^2*se1^2),
+           LCL = exp(log(RR) - 1.96*selnrr),
+           UCL = exp(log(RR) + 1.96*selnrr)) %>%  
+    filter(RR == last(RR)) %>% 
+    dplyr::select(c(RR, LCL, UCL)) #%>% 
+    #kbl() %>% 
+    #kable_styling()
+  
+  return(data)
+  
+}
+
+```
+
+## Calculate RR at 1,252 Days
+
+We calculate the RR at 1,252 days here.
+
+```{r}
+
+km <- survfit(Surv(days, event) ~ trt, data=mCRC)
+
+RR_calc(1252, km) %>% 
+  kbl() %>% 
+  kable_styling()
+
+```
+
+## Calculate RR at different points in follow-up.
+
+We want to plot RR estimates at different points in follow-up. We calculate them here but do not output them. They will be displayed on the survival curve plot.
+
+```{r}
+
+rr_90 <- RR_calc(90, km) # Calculate the RR at 90 days
+rr90 <- as.double(round(rr_90[1,1],2)) # Extract the RR
+
+rr_630 <- RR_calc(630, km)
+rr630 <- as.double(round(rr_630[1,1],2))
+
+rr_990 <- RR_calc(990, km)
+rr990 <- as.double(round(rr_990[1,1],2))
+
+```
+
+# Survival Curve
+
+We plot the study's full survival curve.
+
+```{r}
+
+plot(km, 
+     fun = function(x) 1-x,
+     lty = c("solid", "dashed"), 
+     col = c("#56B4E9","#D55E00"), 
+     xlab = "Time in Days From the Beginning of Follow-up",
+     ylab = "Cumulative Risk",
+     main = "Cumulative Incidence Curve via Kaplan-Meier Estimator",
+     cex = 1.3,
+     cex.axis = 1.3,
+     cex.lab = 1.3,
+     cex.main = 1.3,
+     lwd = 2,
+     mark.time = T)
+abline(v=90, lty="dashed")
+abline(v=630, lty="dashed")
+abline(v=990, lty="dashed")
+text(x=200, y=0.08, paste("RR = ", rr90))
+text(x=740, y=0.7, paste("RR = ", rr630))
+text(x=1100, y=0.85, paste("RR = ", rr990))
+legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
+       lty = c("solid","dashed"),
+       col = c("#56B4E9","#D55E00"),
+       cex = 1,
+       lwd=2)
+
+```
+
+
+
+
+# Plot Kernel-Smoothed Hazard Curves
+
+## Function to Calculate HR at Different FUP
+
+To calculate the HR at different points in follow-up, it is necessary to reset the point at which individuals are administratively censored. This function administratively censors everyone at a user-specified amount of time: `fup_days`.
+
+
+```{r}
+
+HR_FUP <- function(data, fup_days){
+  
+  data2 <- raw_data %>% 
+    mutate(event = ifelse(days > fup_days, 0, event),
+           days = ifelse(days > fup_days, fup_days, days))
+  
+  cox2 <- coxph(formula = Surv(days,event) ~ trt, data=data2, ties = "efron")
+  
+  
+  return(as.double(summary(cox2)$coefficients[1,2]))
+  
+}
+
+
+```
+
+
+## Calculate HRs at Different FUPs
+
+We calculate the hazard ratios at 90, 630, and 990 days of follow-up. These will not be output here but instead plotting on the kernel-smoothed hazard curves.
+
+```{r}
+
+hr90 <- round(HR_FUP(raw_data,90),2)
+
+hr630 <- round(HR_FUP(raw_data,630),2)
+
+hr990 <- round(HR_FUP(raw_data,990),2)
+
+```
+
+## Create Plot
+
+Calculate the kernel-smoothed objects.
+
+```{r}
+
+trt0.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 0)
+trt1.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 1)
+
+```
+
+Calculate the approximately the HRs at each time point via the non-parametric estimates.
+
+```{r}
+
+#Determine which location on the vector of time points is closest to the estimates of interest
+
+## TRT = Chemo Only
+est90_0 <- max(which(trt0.mCRC$est.grid <= 90))
+est630_0 <- max(which(trt0.mCRC$est.grid <= 630))
+est990_0 <- max(which(trt0.mCRC$est.grid <= 990))
+## TRT = Panitumumab+Chemo
+est90_1 <- max(which(trt1.mCRC$est.grid <= 90))
+est630_1 <- max(which(trt1.mCRC$est.grid <= 630))
+est990_1 <- max(which(trt1.mCRC$est.grid <= 990))
+
+# Get the Hazards at that point
+
+## Trt = Chemo Only
+h90_0 <- trt0.mCRC$haz.est[est90_0]
+h630_0 <- trt0.mCRC$haz.est[est630_0]
+h990_0 <- trt0.mCRC$haz.est[est990_0]
+## Trt = Chemo + Panitumumab
+h90_1 <- trt1.mCRC$haz.est[est90_1]
+h630_1 <- trt1.mCRC$haz.est[est630_1]
+h990_1 <- trt1.mCRC$haz.est[est990_1]
+
+# Finally, the kernel-smothed HRs
+h90 <- h90_1/h90_0
+h630 <- h630_1/h630_0
+h990 <- h990_1/h990_0
+
+```
+
+This provides a non-parametric estimate of the hazard rate curves in the two groups.
+
+```{r}
+
+plot(trt0.mCRC, xlab="Time in Days From the Beggining of Follow-up")
+lines(trt1.mCRC, lty="dashed")
+segments(x0= 0,x1=90, y0= 0.000, y1=0.000, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=630, y0=0.00022, y1 = 0.00022, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=990, y0=0.00055, y1=0.00055, lwd=1.5, lty="dashed", col="red")
+legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
+       lty = c("solid","dashed"),
+       cex = 0.8,
+       lwd=2)
+text(x=225, y=0.000, paste("PH HR = ", hr90))
+text(x=500, y= 0.00035, paste("PH HR = ",hr630))
+text(x=900, y= 0.0007, paste("PH HR = ", hr990))
+segments(x0=90, x1=90, y0=0.0011, y1=0.004, lty="dotted")
+segments(x0=630, x1=630, y0=0.0011, y1=0.004, lty="dotted")
+segments(x0=990, x1=990, y0=0.0011, y1=0.004, lty="dotted")
+text(x = 205, y=0.0015, paste("KS HR = ", round(h90,2)))
+text(x = 745, y=0.0035, paste("KS HR = ", round(h630,2)))
+text(x = 1052, y=0.0021, paste("KS HR = ", round(h990,2)))
+
+
+
+```
+
+
+
+# Interaction Term in Cox Model
+
+Model with interaction term at 700 days.
+
+```{r include=FALSE}
+
+interaction <- coxph(Surv(days,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt = list(function(trt, days, ...){trt*days>700}))
+
+summary_int <- summary(interaction)
+
+CI_est <- summary_int$conf.int
+
+coefficients <- summary_int$coefficients
+
+logHR <- as.double(coefficients[1,1]) + as.double(coefficients[2,1])
+varHR <- as.double(coefficients[1,3])**2 + as.double(coefficients[2,3])**2
+q <- qnorm(0.975)
+LCL <- exp(logHR - q*sqrt(varHR))
+UCL <- exp(logHR + q *sqrt(varHR))
+HR <- exp(logHR)
+
+
+# HR from 0- <= 700 days: 0.79, SE=0.07063, coef=-0.23797
+
+l700 <- paste(round(CI_est[1,1],2), " (", round(CI_est[1,3],2),", ", round(CI_est[1,4],2),")")
+
+# HR from 700 on: 
+
+g700 <- paste(round(HR,2)," (",round(LCL,2),", ",round(UCL,2),")")
+
+data.frame(Timing = c("Less than 700 days", "From 700 days"),
+                                HR = c(l700, g700)) %>% 
+  kbl() %>% 
+  kable_styling()
+
+```
+
+
+Model with interaction term between treatment and continuous time.
+
+```{r}
+
+continuous <- coxph(Surv(days,event) ~ trt, 
+                    data = mCRC, 
+                    ties = "efron")
+continuous2 <- cox.zph(continuous, transform = "identity")
+
+
+
+# Plot the time-varying coefficient for treatment
+
+plot(continuous2[1],
+     ylim=c(-1.1, 1.1),
+     xlab = "Time in Days from Start of Follow-up",
+     ylab = "Natural Log Transformed Hazard Ratio"
+     )
+abline(0,0, col="grey", lty=3, lwd=1)
+abline(h=continuous$coefficients[1], col=3, lwd=2, lty=2)
+legend("bottomright",
+       legend=c("Traditional Cox HR",
+                "Time-varying HR"),
+       lty=c(2,1), col=c(3,1), lwd=c(2,2))
+
+
+
+```
+
+
+## Restricted Mean Survival Time
+
+Here, we find the following:
+
+**Trt 1:** 344.6 (318.4, 370.8) Days
+
+**Trt 0:** 289.4 (264.8, 314.0) Days
+
+**Difference:** 55.2 (19.2, 91.1) Days
+
+```{r echo=TRUE}
+
+rmst2(mCRC$days, mCRC$event, mCRC$trt, tau = 1095)
+
+## Trt 1: 344.6 (318.4, 370.8)
+## TRT 0: 289.4 (264.8, 314.0)
+
+## Difference: 55.2 (19.2, 91.1)
+
+```
+
+
+
