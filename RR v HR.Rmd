@@ -57,7 +57,9 @@ The maximum amount of follow-up in the untreated is 1,310 days, while the maximu
 # Want to have a uniform amount of follow-up across the treatment groups, particularly for the non-parametric analyses.
 mCRC <- raw_data %>% 
   mutate(days = ifelse(days > 1252, 1252, days),
-         event = ifelse(days > 1252, 0, event))
+         event = ifelse(days > 1252, 0, event)) %>% 
+  # Calculate years as time frame
+  mutate(years = days/365)
 
 ```
 
@@ -74,7 +76,7 @@ cox <- coxph(formula = Surv(days, event) ~ trt, data=mCRC)
 
 summary(cox)
 
-
+summary_hr <- as.double(summary(cox)[["coefficients"]][2])
 
 ```
 
@@ -103,9 +105,10 @@ RR_calc <- function(fup_days, km_model){
            LCL = exp(log(RR) - 1.96*selnrr),
            UCL = exp(log(RR) + 1.96*selnrr)) %>%  
     filter(RR == last(RR)) %>% 
-    dplyr::select(c(RR, LCL, UCL)) #%>% 
-    #kbl() %>% 
-    #kable_styling()
+    dplyr::select(c(RR, LCL, UCL)) %>% 
+    mutate(RR = round(RR, 2),
+           LCL = round(LCL, 2),
+           UCL = round(UCL, 2))
   
   return(data)
   
@@ -119,11 +122,26 @@ We calculate the RR at 1,252 days here.
 
 ```{r}
 
+# Run the Kaplan-Meier estimator
 km <- survfit(Surv(days, event) ~ trt, data=mCRC)
 
+# Pull a summary of the Kaplan-Meier output
+summary_km <- summary(km)
+
+#Make a useable database
+
+summary_tibble <- tibble(trt = summary_km$strata, 
+                    time = summary_km$time, surv = summary_km$surv) %>% 
+  mutate(time_365 = time / 365,
+         risk = 1 - surv,
+         trt2 = factor(trt, levels = c(0, 1), labels = c("Chemo Only", "Panitumumab+Chemo"))
+         )
+
+# Make the table interpretable
 RR_calc(1252, km) %>% 
   kbl() %>% 
   kable_styling()
+
 
 ```
 
@@ -133,16 +151,70 @@ We want to plot RR estimates at different points in follow-up. We calculate them
 
 ```{r}
 
-rr_90 <- RR_calc(90, km) # Calculate the RR at 90 days
-rr90 <- as.double(round(rr_90[1,1],2)) # Extract the RR
+# REVISED FOR MORE CLINICAL MEANING
 
-rr_630 <- RR_calc(630, km)
-rr630 <- as.double(round(rr_630[1,1],2))
+rr_180 <- RR_calc(180, km) # Calculate the RR at 90 days
+rr180 <- as.double(round(rr_180[1,1],2)) # Extract the RR
 
-rr_990 <- RR_calc(990, km)
-rr990 <- as.double(round(rr_990[1,1],2))
+rr_365 <- RR_calc(365, km) # Calculate the RR at 90 days
+rr365 <- as.double(round(rr_365[1,1],2)) # Extract the RR
+
+rr_730 <- RR_calc(730, km)
+rr730 <- as.double(round(rr_730[1,1],2))
+
+rr_1095 <- RR_calc(1095, km)
+rr1095 <- as.double(round(rr_1095[1,1],2))
+
+
+# OLD
+
+# rr_90 <- RR_calc(90, km) # Calculate the RR at 90 days
+# rr90 <- as.double(round(rr_90[1,1],2)) # Extract the RR
+# 
+# rr_630 <- RR_calc(630, km)
+# rr630 <- as.double(round(rr_630[1,1],2))
+# 
+# rr_990 <- RR_calc(990, km)
+# rr990 <- as.double(round(rr_990[1,1],2))
 
 ```
+
+# Calculate median survival time
+
+Find the first point in follow-up where survial falls at or below 50%
+
+## Panitumumab-Chemotherapy
+
+```{r}
+# Trt = 1
+median_p_chemo <- as.double(subset(summary_tibble$time, 
+                                   summary_tibble$trt == "trt=1" & summary_tibble$surv <= .5)[1])
+
+#Print
+#Days
+#median_p_chemo
+#Years
+round(median_p_chemo/365,1)
+
+```
+
+## Chemotherapy-Only
+
+```{r}
+
+# Trt = 0
+median_chemo <- as.double(subset(summary_tibble$time, 
+                                 summary_tibble$trt == "trt=0" & summary_tibble$surv <= .5)[1])
+#Print
+#Days
+#median_chemo
+#Years
+round(median_chemo/365,1)
+
+```
+
+
+
 
 # Survival Curve
 
@@ -150,30 +222,111 @@ We plot the study's full survival curve.
 
 ```{r}
 
-plot(km, 
-     fun = function(x) 1-x,
-     lty = c("solid", "dashed"), 
-     col = c("#56B4E9","#D55E00"), 
-     xlab = "Time in Days From the Beginning of Follow-up",
-     ylab = "Cumulative Risk",
-     main = "Cumulative Incidence Curve via Kaplan-Meier Estimator",
-     cex = 1.3,
-     cex.axis = 1.3,
-     cex.lab = 1.3,
-     cex.main = 1.3,
-     lwd = 2,
-     mark.time = T)
-abline(v=90, lty="dashed")
-abline(v=630, lty="dashed")
-abline(v=990, lty="dashed")
-text(x=200, y=0.08, paste("RR = ", rr90))
-text(x=740, y=0.7, paste("RR = ", rr630))
-text(x=1100, y=0.85, paste("RR = ", rr990))
-legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
-       lty = c("solid","dashed"),
-       col = c("#56B4E9","#D55E00"),
-       cex = 1,
-       lwd=2)
+
+#Make sure that all have the right number of decimal places
+rr180_formatted <- sprintf("%.2f", rr180)
+rr365_formatted <- sprintf("%.2f", rr365)
+rr730_formatted <- sprintf("%.2f", rr730)
+rr1095_formatted <- sprintf("%.2f", rr1095)
+
+# For manuscript
+#bitmap("Cumulative Incidence_Years.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+# For poster
+#bitmap("Cumulative Incidence_Poster.tiff", width=14, height=7.5, units="in", type='tifflzw',res=600)
+# Extract time points and survival probabilities
+
+#tiff(filename = "Cumulative Incidence_Years.tiff", width = 140, height = 100, units = "mm", res = 600, compression = "lzw")
+summary_tibble %>% 
+  #Plot
+  ggplot(aes(x = time_365, y = risk, color = trt, linetype=trt)) +
+    geom_line() +
+    labs(
+      x = "Time From the Beginning of Follow-up (Years)",
+      y = "Cumulative Risk",
+      color = "",
+      linetype = "",
+      title = "Cumulive Incidence Curve via Kaplan-Meier Estimator"
+    ) +
+  scale_color_manual(values = c("trt=0" = "blue", "trt=1" = "red"),
+                     breaks = c("trt=0","trt=1"),
+                     labels = c("Chemo Only","Panitumumab + Chemo")) +
+  scale_linetype_manual(
+    values = c("trt=0" = "solid", "trt=1" = "dashed"),
+    breaks = c("trt=0","trt=1"),
+    labels = c("Chemo Only","Panitumumab + Chemo")
+  ) + 
+  theme(legend.position = "bottom",  # Move the legend to the bottom
+        legend.direction = "horizontal",  # Display the legend items horizontally
+        legend.box = "horizontal") +  # Display the legend items in a horizontal box
+  geom_vline(xintercept=180/365, lty="dashed", col="darkgrey") +
+  geom_vline(xintercept=365/365, lty="dashed", col="darkgrey") +
+  geom_vline(xintercept=730/365, lty="dashed", col="darkgrey") +
+  geom_vline(xintercept=1095/365, lty="dashed", col="darkgrey") +
+  geom_segment(x = 0, xend = 3.5, y = 0.5, yend = 0.5, color = "darkgrey", 
+               lty = "dashed", linewidth = 0.25) +
+  annotate("text", 
+           x=c(0.85, 1.35, 2.25, 3.23
+               #, 2
+               ),
+           y=c(0.25, 0.6, 0.75, 0.85
+               #, 0.45
+               ), 
+           label = c(paste("RR = ", rr180_formatted),
+                     paste("RR = ", rr365_formatted),
+                     paste("RR = ", rr730_formatted),
+                     paste("RR = ", rr1095_formatted)),
+                                                      #paste("Median PFS: Panitumumab-Chemo = ",
+                                                       #round(median_p_chemo/365,2),
+                                                       #", Chemo = ", round(median_chemo/365, 2))),
+           cex = 3) +
+  theme_bw()
+#dev.off()  # Close the TIFF file
+
+#dev.off()
+  
+  
+
+
+
+
+
+#OLD CODE
+
+# For manuscript
+#bitmap("Cumulative Incidence.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+# For poster
+# bitmap("Cumulative Incidence_Poster.tiff", width=14, height=7.5, units="in", type='tifflzw',res=600)
+# plot(km, 
+#      fun = function(x) 1-x,
+#      lty = c("solid", "dashed"), 
+#      #col = c("#56B4E9","#D55E00"), 
+#      xlab = "Time From the Beginning of Follow-up (Days)",
+#      ylab = "Cumulative Risk",
+#      #main = "Cumulative Incidence Curve via Kaplan-Meier Estimator",
+#      #cex = 1.3,
+#      cex = 2,
+#      #cex.axis = 1.3,
+#      cex.axis = 2,
+#      #cex.lab = 1.3,
+#      cex.lab = 1.5,
+#      #cex.main = 1.3,
+#      cex.main = 2,
+#      lwd = 2.5,
+#      mark.time = T)
+# abline(v=365/365, lty="dashed")
+# abline(v=730/365, lty="dashed")
+# abline(v=1095/365, lty="dashed")
+# text(x=200, y=0.08, paste("RR = ", rr90), cex=2)
+# text(x=740, y=0.7, paste("RR = ", rr630), cex=2)
+# text(x=1100, y=0.85, paste("RR = ", rr990), cex=2)
+# legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
+#        lty = c("solid","dashed"),
+#        #col = c("#56B4E9","#D55E00"),
+#        #cex = 1,
+#        cex = 1.45,
+#        lwd=2,
+#        bty = "n")
+# dev.off()
 
 ```
 
@@ -212,11 +365,13 @@ We calculate the hazard ratios at 90, 630, and 990 days of follow-up. These will
 
 ```{r}
 
-hr90 <- round(HR_FUP(raw_data,90),2)
+hr180 <- round(HR_FUP(raw_data,180),2)
 
-hr630 <- round(HR_FUP(raw_data,630),2)
+hr365 <- round(HR_FUP(raw_data,365),2)
 
-hr990 <- round(HR_FUP(raw_data,990),2)
+hr730 <- round(HR_FUP(raw_data,730),2)
+
+hr1095 <- round(HR_FUP(raw_data,1095),2)
 
 ```
 
@@ -226,8 +381,18 @@ Calculate the kernel-smoothed objects.
 
 ```{r}
 
-trt0.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 0)
-trt1.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 1)
+#Transform this so that it's years
+mCRC$years <- mCRC$days/365
+
+trt0.mCRC <- muhaz(mCRC$years, mCRC$event,subset = mCRC$trt == 0)
+
+trt1.mCRC <- muhaz(mCRC$years, mCRC$event,subset = mCRC$trt == 1)
+
+#OLD CODE -- Days as the time unit
+
+#trt0.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 0)
+
+#trt1.mCRC <- muhaz(mCRC$days, mCRC$event,subset = mCRC$trt == 1)
 
 ```
 
@@ -238,55 +403,81 @@ Calculate the approximately the HRs at each time point via the non-parametric es
 #Determine which location on the vector of time points is closest to the estimates of interest
 
 ## TRT = Chemo Only
-est90_0 <- max(which(trt0.mCRC$est.grid <= 90))
-est630_0 <- max(which(trt0.mCRC$est.grid <= 630))
-est990_0 <- max(which(trt0.mCRC$est.grid <= 990))
+est180_0 <- max(which(trt0.mCRC$est.grid <= 180/365))
+est365_0 <- max(which(trt0.mCRC$est.grid <= 365/365))
+est730_0 <- max(which(trt0.mCRC$est.grid <= 730/365))
+est1095_0 <- max(which(trt0.mCRC$est.grid <= 1095/365))
 ## TRT = Panitumumab+Chemo
-est90_1 <- max(which(trt1.mCRC$est.grid <= 90))
-est630_1 <- max(which(trt1.mCRC$est.grid <= 630))
-est990_1 <- max(which(trt1.mCRC$est.grid <= 990))
+est180_1 <- max(which(trt1.mCRC$est.grid <= 180/365))
+est365_1 <- max(which(trt1.mCRC$est.grid <= 365/365))
+est730_1 <- max(which(trt1.mCRC$est.grid <= 730/365))
+est1095_1 <- max(which(trt1.mCRC$est.grid <= 1095/365))
 
 # Get the Hazards at that point
 
 ## Trt = Chemo Only
-h90_0 <- trt0.mCRC$haz.est[est90_0]
-h630_0 <- trt0.mCRC$haz.est[est630_0]
-h990_0 <- trt0.mCRC$haz.est[est990_0]
+h180_0 <- trt0.mCRC$haz.est[est180_0]
+h365_0 <- trt0.mCRC$haz.est[est365_0]
+h730_0 <- trt0.mCRC$haz.est[est730_0]
+h1095_0 <- trt0.mCRC$haz.est[est1095_0]
 ## Trt = Chemo + Panitumumab
-h90_1 <- trt1.mCRC$haz.est[est90_1]
-h630_1 <- trt1.mCRC$haz.est[est630_1]
-h990_1 <- trt1.mCRC$haz.est[est990_1]
+h180_1 <- trt1.mCRC$haz.est[est180_1]
+h365_1 <- trt1.mCRC$haz.est[est365_1]
+h730_1 <- trt1.mCRC$haz.est[est730_1]
+h1095_1 <- trt1.mCRC$haz.est[est1095_1]
 
 # Finally, the kernel-smothed HRs
-h90 <- h90_1/h90_0
-h630 <- h630_1/h630_0
-h990 <- h990_1/h990_0
+h180 <- h180_1/h180_0
+h365 <- h365_1/h365_0
+h730 <- h730_1/h730_0
+h1095 <- h1095_1/h1095_0
 
 ```
 
 This provides a non-parametric estimate of the hazard rate curves in the two groups.
 
+
 ```{r}
 
-plot(trt0.mCRC, xlab="Time in Days From the Beggining of Follow-up")
-lines(trt1.mCRC, lty="dashed")
-segments(x0= 0,x1=90, y0= 0.000, y1=0.000, lwd=1.5, lty="dashed", col="red")
-segments(x0=0, x1=630, y0=0.00022, y1 = 0.00022, lwd=1.5, lty="dashed", col="red")
-segments(x0=0, x1=990, y0=0.00055, y1=0.00055, lwd=1.5, lty="dashed", col="red")
-legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
-       lty = c("solid","dashed"),
-       cex = 0.8,
-       lwd=2)
-text(x=225, y=0.000, paste("PH HR = ", hr90))
-text(x=500, y= 0.00035, paste("PH HR = ",hr630))
-text(x=900, y= 0.0007, paste("PH HR = ", hr990))
-segments(x0=90, x1=90, y0=0.0011, y1=0.004, lty="dotted")
-segments(x0=630, x1=630, y0=0.0011, y1=0.004, lty="dotted")
-segments(x0=990, x1=990, y0=0.0011, y1=0.004, lty="dotted")
-text(x = 205, y=0.0015, paste("KS HR = ", round(h90,2)))
-text(x = 745, y=0.0035, paste("KS HR = ", round(h630,2)))
-text(x = 1052, y=0.0021, paste("KS HR = ", round(h990,2)))
 
+# For manuscript
+#bitmap("KS Hazard Curves_Years.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+# For poster
+#bitmap("KS Hazard Curves_Poster.tiff", width=14, height=6.5, units='in', type='tifflzw',res=600)
+
+#tiff(filename = "KS Hazard Curves_Years.tiff", width = 140, height = 100, units = "mm", res = 600, compression = "lzw")
+plot(trt0.mCRC, 
+     xlab = "Time From the Beginning of Follow-up (Years)", # Adjust x-axis label
+     lwd = 2.5,
+     cex = 1,
+     cex.axis = 1,
+     cex.lab = 1 #,
+     #xlim = c(0, 3.5) # Adjust x-axis limits to match the new scale
+)
+lines(trt1.mCRC, lty="dashed", lwd=2.5)
+segments(x0=0,x1=180/365, y0= 0.000, y1=0.000, lwd=1.5, lty="dashed", col="red")
+segments(x0=0,x1=365/365, y0= 0.04, y1=0.04, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=730/365, y0=0.09, y1 = 0.09, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=1095/365, y0=0.14, y1=0.14, lwd=1.5, lty="dashed", col="red")
+legend(1.93, 1.45, c("Chemo Only","Panitumumab+Chemo"), 
+       lty = c("solid","dashed"),
+       cex = 0.7,
+       lwd=2,
+       bty = "n")
+text(x=0.8, y=0.0, paste("PH HR=", hr180), cex = 0.9)
+text(x=1.3, y=0.05, paste("PH HR=", hr365), cex = 0.9)
+text(x=2.3, y= 0.1, paste("PH HR=",hr730), cex = 0.9)
+text(x=2.75, y= 0.19, paste("PH HR=", hr1095), cex = 0.9)
+segments(x0=180/365, x1=180/365, y0=0.4, y1=1.38, lty="dotted")
+segments(x0=365/365, x1=365/365, y0=0.75, y1=1.38, lty="dotted")
+segments(x0=730/365, x1=730/365, y0=0.4, y1=1.38, lty="dotted")
+segments(x0=1095/365, x1=1095/365, y0=0.4, y1=1.38, lty="dotted")
+text(x = 0.77, y=0.65, paste("KS HR=", round(h180,2)), cex = 1)
+text(x = 1.27, y=0.8, paste("KS HR=", round(h365,2)), cex = 1)
+text(x = 2.27, y=0.5, paste("KS HR=", round(h730,2)), cex = 1)
+text(x = 2.73, 0.8, paste("KS HR=", round(h1095,2)), cex = 1) # previously: x=1052
+
+#dev.off()
 
 
 ```
@@ -299,7 +490,10 @@ Model with interaction term at 700 days.
 
 ```{r include=FALSE}
 
-interaction <- coxph(Surv(days,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt = list(function(trt, days, ...){trt*days>700}))
+#Modified to use years, not days
+interaction <- coxph(Surv(years,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt = list(function(trt, years, ...){trt*years>700/365}))
+
+# interaction <- coxph(Surv(days,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt =  list(function(trt, days, ...){trt*days>700}))
 
 summary_int <- summary(interaction)
 
@@ -323,7 +517,7 @@ l700 <- paste(round(CI_est[1,1],2), " (", round(CI_est[1,3],2),", ", round(CI_es
 
 g700 <- paste(round(HR,2)," (",round(LCL,2),", ",round(UCL,2),")")
 
-data.frame(Timing = c("Less than 700 days", "From 700 days"),
+data.frame(Timing = c("Less than 1.9 years", "From 1.9 years"),
                                 HR = c(l700, g700)) %>% 
   kbl() %>% 
   kable_styling()
@@ -333,29 +527,66 @@ data.frame(Timing = c("Less than 700 days", "From 700 days"),
 
 Model with interaction term between treatment and continuous time.
 
-```{r}
+```{r fig.show='hide'}
 
-continuous <- coxph(Surv(days,event) ~ trt, 
+continuous <- coxph(Surv(years,event) ~ trt, # Previously days
                     data = mCRC, 
                     ties = "efron")
 continuous2 <- cox.zph(continuous, transform = "identity")
 
-
-
-# Plot the time-varying coefficient for treatment
+# Grab the y-axis labels from the upcoming plot so that we can exponentiate and plot accordingly
 
 plot(continuous2[1],
      ylim=c(-1.1, 1.1),
-     xlab = "Time in Days from Start of Follow-up",
-     ylab = "Natural Log Transformed Hazard Ratio"
+     xlab = "Time from Start of Follow-up (Days)",
+     ylab = "Natural Log Transformed Hazard Ratio",
+     #cex = 1.3,
+     cex = 2,
+     #cex.axis = 1.3,
+     cex.axis = 2,
+     #cex.lab = 1.3,
+     cex.lab = 1.5,
+     lwd = 2.5
      )
-abline(0,0, col="grey", lty=3, lwd=1)
-abline(h=continuous$coefficients[1], col=3, lwd=2, lty=2)
+
+y_labels <- axis(2, at = NULL, las = 1)
+exp_labels <- round(exp(y_labels),1)
+
+```
+
+```{r}
+
+# Plot the time-varying coefficient for treatment
+
+# For manuscript
+#bitmap("HR with Continuous Time_Years.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+# For poster
+#bitmap("HRs with Continuous Time_Poster.tiff", width=14, height=7.5, units='in', type='tifflzw',res=600)
+
+plot(continuous2[1], 
+     ylim=c(-1.1, 1.1),
+     xlab = "Time from Start of Follow-up (Years)",
+     ylab = "Hazard Ratio (Log Scale)",
+     #cex = 1.3,
+     cex = 1,
+     #cex.axis = 1.3,
+     cex.axis = 1,
+     #cex.lab = 1.3,
+     cex.lab = 1.25,
+     lwd = 2.5,
+     yaxt = "n"
+     )
+axis(2, at = y_labels, labels = format(exp_labels, scientific = FALSE), las = 1, cex.axis = 1.2)
+abline(0,0, lty=3, lwd=1.25, col="grey")
+abline(h=log(summary_hr), lwd=2, lty=2, col="green") # previously had col=3
 legend("bottomright",
        legend=c("Traditional Cox HR",
                 "Time-varying HR"),
-       lty=c(2,1), col=c(3,1), lwd=c(2,2))
+       lty=c(2,1), col=c("green",1), lwd=c(2,2),
+       cex=1,
+       bty = "n")
 
+#dev.off()
 
 
 ```
