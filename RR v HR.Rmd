@@ -245,7 +245,7 @@ summary_tibble %>%
       y = "Cumulative Risk",
       color = "",
       linetype = "",
-      title = "Cumulive Incidence Curve via Kaplan-Meier Estimator"
+      title = "Cumulative Incidence Curve via Kaplan-Meier Estimator"
     ) +
   scale_color_manual(values = c("trt=0" = "blue", "trt=1" = "red"),
                      breaks = c("trt=0","trt=1"),
@@ -255,6 +255,7 @@ summary_tibble %>%
     breaks = c("trt=0","trt=1"),
     labels = c("Chemo Only","Panitumumab + Chemo")
   ) + 
+  theme_bw()+
   theme(legend.position = "bottom",  # Move the legend to the bottom
         legend.direction = "horizontal",  # Display the legend items horizontally
         legend.box = "horizontal") +  # Display the legend items in a horizontal box
@@ -265,7 +266,7 @@ summary_tibble %>%
   geom_segment(x = 0, xend = 3.5, y = 0.5, yend = 0.5, color = "darkgrey", 
                lty = "dashed", linewidth = 0.25) +
   annotate("text", 
-           x=c(0.85, 1.35, 2.25, 3.23
+           x=c(0.75, 1.25, 2.25, 3.25
                #, 2
                ),
            y=c(0.25, 0.6, 0.75, 0.85
@@ -278,55 +279,9 @@ summary_tibble %>%
                                                       #paste("Median PFS: Panitumumab-Chemo = ",
                                                        #round(median_p_chemo/365,2),
                                                        #", Chemo = ", round(median_chemo/365, 2))),
-           cex = 3) +
-  theme_bw()
+           cex = 3) #+
+  #theme_bw()
 #dev.off()  # Close the TIFF file
-
-#dev.off()
-  
-  
-
-
-
-
-
-#OLD CODE
-
-# For manuscript
-#bitmap("Cumulative Incidence.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
-# For poster
-# bitmap("Cumulative Incidence_Poster.tiff", width=14, height=7.5, units="in", type='tifflzw',res=600)
-# plot(km, 
-#      fun = function(x) 1-x,
-#      lty = c("solid", "dashed"), 
-#      #col = c("#56B4E9","#D55E00"), 
-#      xlab = "Time From the Beginning of Follow-up (Days)",
-#      ylab = "Cumulative Risk",
-#      #main = "Cumulative Incidence Curve via Kaplan-Meier Estimator",
-#      #cex = 1.3,
-#      cex = 2,
-#      #cex.axis = 1.3,
-#      cex.axis = 2,
-#      #cex.lab = 1.3,
-#      cex.lab = 1.5,
-#      #cex.main = 1.3,
-#      cex.main = 2,
-#      lwd = 2.5,
-#      mark.time = T)
-# abline(v=365/365, lty="dashed")
-# abline(v=730/365, lty="dashed")
-# abline(v=1095/365, lty="dashed")
-# text(x=200, y=0.08, paste("RR = ", rr90), cex=2)
-# text(x=740, y=0.7, paste("RR = ", rr630), cex=2)
-# text(x=1100, y=0.85, paste("RR = ", rr990), cex=2)
-# legend("bottomright", c("Chemo Only","Panitumumab+Chemo"), 
-#        lty = c("solid","dashed"),
-#        #col = c("#56B4E9","#D55E00"),
-#        #cex = 1,
-#        cex = 1.45,
-#        lwd=2,
-#        bty = "n")
-# dev.off()
 
 ```
 
@@ -364,14 +319,19 @@ HR_FUP <- function(data, fup_days){
 We calculate the hazard ratios at 90, 630, and 990 days of follow-up. These will not be output here but instead plotting on the kernel-smoothed hazard curves.
 
 ```{r}
+# Calculate and reformat
 
 hr180 <- round(HR_FUP(raw_data,180),2)
+hr180 <- sprintf("%.2f", hr180)
 
 hr365 <- round(HR_FUP(raw_data,365),2)
+hr365 <- sprintf("%.2f", hr365)
 
 hr730 <- round(HR_FUP(raw_data,730),2)
+hr730 <- sprintf("%.2f", hr730)
 
 hr1095 <- round(HR_FUP(raw_data,1095),2)
+hr1095 <- sprintf("%.2f", hr1095)
 
 ```
 
@@ -455,27 +415,27 @@ plot(trt0.mCRC,
      #xlim = c(0, 3.5) # Adjust x-axis limits to match the new scale
 )
 lines(trt1.mCRC, lty="dashed", lwd=2.5)
-segments(x0=0,x1=180/365, y0= 0.000, y1=0.000, lwd=1.5, lty="dashed", col="red")
-segments(x0=0,x1=365/365, y0= 0.04, y1=0.04, lwd=1.5, lty="dashed", col="red")
-segments(x0=0, x1=730/365, y0=0.09, y1 = 0.09, lwd=1.5, lty="dashed", col="red")
-segments(x0=0, x1=1095/365, y0=0.14, y1=0.14, lwd=1.5, lty="dashed", col="red")
-legend(1.93, 1.45, c("Chemo Only","Panitumumab+Chemo"), 
+segments(x0=0,x1=180/365, y0= 0.00, y1=0.00, lwd=1.5, lty="dashed", col="red")
+segments(x0=0,x1=365/365, y0= 0.05, y1=0.05, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=730/365, y0=0.10, y1 = 0.10, lwd=1.5, lty="dashed", col="red")
+segments(x0=0, x1=1095/365, y0=0.15, y1=0.15, lwd=1.5, lty="dashed", col="red")
+legend(1.93, 1.43, c("Chemo Only","Panitumumab+Chemo"), 
        lty = c("solid","dashed"),
        cex = 0.7,
        lwd=2,
        bty = "n")
-text(x=0.8, y=0.0, paste("PH HR=", hr180), cex = 0.9)
-text(x=1.3, y=0.05, paste("PH HR=", hr365), cex = 0.9)
-text(x=2.3, y= 0.1, paste("PH HR=",hr730), cex = 0.9)
-text(x=2.75, y= 0.19, paste("PH HR=", hr1095), cex = 0.9)
-segments(x0=180/365, x1=180/365, y0=0.4, y1=1.38, lty="dotted")
-segments(x0=365/365, x1=365/365, y0=0.75, y1=1.38, lty="dotted")
-segments(x0=730/365, x1=730/365, y0=0.4, y1=1.38, lty="dotted")
-segments(x0=1095/365, x1=1095/365, y0=0.4, y1=1.38, lty="dotted")
-text(x = 0.77, y=0.65, paste("KS HR=", round(h180,2)), cex = 1)
-text(x = 1.27, y=0.8, paste("KS HR=", round(h365,2)), cex = 1)
-text(x = 2.27, y=0.5, paste("KS HR=", round(h730,2)), cex = 1)
-text(x = 2.73, 0.8, paste("KS HR=", round(h1095,2)), cex = 1) # previously: x=1052
+text(x=0.74, y=0.0, paste("PH HR=", hr180), cex = 0.9)
+text(x=1.25, y=0.05, paste("PH HR=", hr365), cex = 0.9)
+text(x=2.25, y= 0.1, paste("PH HR=",hr730), cex = 0.9)
+text(x=2.75, y= 0.20, paste("PH HR=", hr1095), cex = 0.9)
+segments(x0=180/365, x1=180/365, y0=0.0, y1=1.38, lty="dotted")
+segments(x0=365/365, x1=365/365, y0=0.05, y1=1.38, lty="dotted")
+segments(x0=730/365, x1=730/365, y0=0.10, y1=1.38, lty="dotted")
+segments(x0=1095/365, x1=1095/365, y0=0.15, y1=1.38, lty="dotted")
+text(x = 0.74, y=0.65, paste("KS HR=", round(h180,2)), cex = 0.9)
+text(x = 1.25, y=0.8, paste("KS HR=", round(h365,2)), cex = 0.9)
+text(x = 2.25, y=0.5, paste("KS HR=", round(h730,2)), cex = 0.9)
+text(x = 2.75, 0.8, paste("KS HR=", round(h1095,2)), cex = 0.9) # previously: x=1052
 
 #dev.off()
 
