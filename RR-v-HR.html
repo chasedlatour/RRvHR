@@ -1813,6 +1813,26 @@ div.tocify {
 <p>Call in the data from the server. These data are publicly accessible through Project Data Sphere but require a signed data use agreement, so we do not provide them here.</p>
 <pre class="r"><code>raw_data &lt;- read_sas(&quot;/local/projects/DETECTe/data/raw/mCRC_WT/analysis/cohort.sas7bdat&quot;)</code></pre>
 </div>
+<div id="describe-the-participants" class="section level1">
+<h1>Describe the participants</h1>
+<p>Here, we determine how many people we have in each trial. Folks in PRIME received panitumumab as first-line therapy (i.e., first_line = 1) whereas folks in Study 20050181 received panitumumab as second-line therapy (i.e., first_line = 0).</p>
+<pre class="r"><code># Get the total number of individuals across the trials
+
+raw_data %&gt;% 
+  summarize(n_total = n())</code></pre>
+<pre><code>## # A tibble: 1 × 1
+##   n_total
+##     &lt;int&gt;
+## 1     984</code></pre>
+<pre class="r"><code>raw_data %&gt;% 
+  group_by(first_line) %&gt;% 
+  summarize(n_by_trial = n())</code></pre>
+<pre><code>## # A tibble: 2 × 2
+##   first_line n_by_trial
+##        &lt;dbl&gt;      &lt;int&gt;
+## 1          0        472
+## 2          1        512</code></pre>
+</div>
 <div id="clean-the-dataset" class="section level1">
 <h1>Clean the dataset</h1>
 <p>Here we first check the maximum amount of follow-up in each treatment arm.</p>

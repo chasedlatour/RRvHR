@@ -35,6 +35,23 @@ raw_data <- read_sas("/local/projects/DETECTe/data/raw/mCRC_WT/analysis/cohort.s
 
 ```
 
+# Describe the participants
+
+Here, we determine how many people we have in each trial. Folks in PRIME received panitumumab as first-line therapy (i.e., first_line = 1) whereas folks in Study 20050181 received panitumumab as second-line therapy (i.e., first_line = 0).
+
+```{r}
+
+# Get the total number of individuals across the trials
+
+raw_data %>% 
+  summarize(n_total = n())
+
+raw_data %>% 
+  group_by(first_line) %>% 
+  summarize(n_by_trial = n())
+
+```
+
 # Clean the dataset
 
 Here we first check the maximum amount of follow-up in each treatment arm.
