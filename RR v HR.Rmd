@@ -151,7 +151,6 @@ We want to plot RR estimates at different points in follow-up. We calculate them
 
 ```{r}
 
-# REVISED FOR MORE CLINICAL MEANING
 
 rr_180 <- RR_calc(180, km) # Calculate the RR at 90 days
 rr180 <- as.double(round(rr_180[1,1],2)) # Extract the RR
@@ -164,18 +163,6 @@ rr730 <- as.double(round(rr_730[1,1],2))
 
 rr_1095 <- RR_calc(1095, km)
 rr1095 <- as.double(round(rr_1095[1,1],2))
-
-
-# OLD
-
-# rr_90 <- RR_calc(90, km) # Calculate the RR at 90 days
-# rr90 <- as.double(round(rr_90[1,1],2)) # Extract the RR
-# 
-# rr_630 <- RR_calc(630, km)
-# rr630 <- as.double(round(rr_630[1,1],2))
-# 
-# rr_990 <- RR_calc(990, km)
-# rr990 <- as.double(round(rr_990[1,1],2))
 
 ```
 
@@ -230,12 +217,12 @@ rr730_formatted <- sprintf("%.2f", rr730)
 rr1095_formatted <- sprintf("%.2f", rr1095)
 
 # For manuscript
-#bitmap("Cumulative Incidence_Years.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+#tiff(filename = "Cumulative Incidence_Years.tiff", width = 140, height = 100, units = "mm", res = 600, compression = "lzw")
 # For poster
 #bitmap("Cumulative Incidence_Poster.tiff", width=14, height=7.5, units="in", type='tifflzw',res=600)
 # Extract time points and survival probabilities
 
-#tiff(filename = "Cumulative Incidence_Years.tiff", width = 140, height = 100, units = "mm", res = 600, compression = "lzw")
+
 summary_tibble %>% 
   #Plot
   ggplot(aes(x = time_365, y = risk, color = trt, linetype=trt)) +
@@ -263,8 +250,8 @@ summary_tibble %>%
   geom_vline(xintercept=365/365, lty="dashed", col="darkgrey") +
   geom_vline(xintercept=730/365, lty="dashed", col="darkgrey") +
   geom_vline(xintercept=1095/365, lty="dashed", col="darkgrey") +
-  geom_segment(x = 0, xend = 3.5, y = 0.5, yend = 0.5, color = "darkgrey", 
-               lty = "dashed", linewidth = 0.25) +
+  geom_segment(x = 0, xend = 3.5, y = 0.5, yend = 0.5, color = "black", 
+               lty = "solid", linewidth = 0.6) +
   annotate("text", 
            x=c(0.75, 1.25, 2.25, 3.25
                #, 2
@@ -421,28 +408,49 @@ segments(x0=0, x1=730/365, y0=0.10, y1 = 0.10, lwd=1.5, lty="dashed", col="red")
 segments(x0=0, x1=1095/365, y0=0.15, y1=0.15, lwd=1.5, lty="dashed", col="red")
 legend(1.93, 1.43, c("Chemo Only","Panitumumab+Chemo"), 
        lty = c("solid","dashed"),
-       cex = 0.7,
-       lwd=2,
+       cex = 0.5,
+       lwd=1.5,
        bty = "n")
-text(x=0.74, y=0.0, paste("PH HR=", hr180), cex = 0.9)
-text(x=1.25, y=0.05, paste("PH HR=", hr365), cex = 0.9)
-text(x=2.25, y= 0.1, paste("PH HR=",hr730), cex = 0.9)
-text(x=2.75, y= 0.20, paste("PH HR=", hr1095), cex = 0.9)
+text(x=0.74, y=0.0, paste("PH HR=", hr180), cex = 0.6)
+text(x=1.25, y=0.05, paste("PH HR=", hr365), cex = 0.6)
+text(x=2.25, y= 0.1, paste("PH HR=",hr730), cex = 0.6)
+text(x=2.75, y= 0.20, paste("PH HR=", hr1095), cex = 0.6)
 segments(x0=180/365, x1=180/365, y0=0.0, y1=1.38, lty="dotted")
 segments(x0=365/365, x1=365/365, y0=0.05, y1=1.38, lty="dotted")
 segments(x0=730/365, x1=730/365, y0=0.10, y1=1.38, lty="dotted")
 segments(x0=1095/365, x1=1095/365, y0=0.15, y1=1.38, lty="dotted")
-text(x = 0.74, y=0.65, paste("KS HR=", round(h180,2)), cex = 0.9)
-text(x = 1.25, y=0.8, paste("KS HR=", round(h365,2)), cex = 0.9)
-text(x = 2.25, y=0.5, paste("KS HR=", round(h730,2)), cex = 0.9)
-text(x = 2.75, 0.8, paste("KS HR=", round(h1095,2)), cex = 0.9) # previously: x=1052
+text(x = 0.74, y=0.65, paste("KS HR=", round(h180,2)), cex = 0.6)
+text(x = 1.25, y=0.8, paste("KS HR=", round(h365,2)), cex = 0.6)
+text(x = 2.25, y=0.5, paste("KS HR=", round(h730,2)), cex = 0.6)
+text(x = 2.75, 0.8, paste("KS HR=", round(h1095,2)), cex = 0.6) # previously: x=1052
 
 #dev.off()
 
 
 ```
 
+# Plot Log of Cumualtive Hazards
 
+Plotting the log of the cumualtive hazards is another tool for assessing the PH assumption. If the lines are relatively parallel, then we would say that they are proportional. We see here again that the lines cross.
+
+```{r}
+
+## For manuscript
+# bitmap("Plot of the Log Cumulative Hazards.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
+
+#pdf("Plot_of_the_Log_Cumulative_Hazards.pdf")
+
+plot(survfit(Surv(years,event) ~ trt, data = mCRC), 
+     col=c("black", "red"), 
+     fun="cloglog",
+     main = "Cumulative Hazard Plot",
+     xlab = "log(t)",
+     ylab = "log[-log(Survival Probability)]")
+
+#dev.off()
+
+
+```
 
 # Interaction Term in Cox Model
 
@@ -451,7 +459,7 @@ Model with interaction term at 700 days.
 ```{r include=FALSE}
 
 #Modified to use years, not days
-interaction <- coxph(Surv(years,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt = list(function(trt, years, ...){trt*years>700/365}))
+interaction <- coxph(Surv(years,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt = list(function(trt, years, ...){trt*years>638.75/365}))
 
 # interaction <- coxph(Surv(days,event) ~ trt + tt(trt), data = mCRC, ties = "efron", tt =  list(function(trt, days, ...){trt*days>700}))
 
@@ -494,6 +502,9 @@ continuous <- coxph(Surv(years,event) ~ trt, # Previously days
                     ties = "efron")
 continuous2 <- cox.zph(continuous, transform = "identity")
 
+# Output results from continuous2 - This provides the p-value for the test of non-proportional hazards.
+continuous2
+
 # Grab the y-axis labels from the upcoming plot so that we can exponentiate and plot accordingly
 
 plot(continuous2[1],
@@ -522,6 +533,8 @@ exp_labels <- round(exp(y_labels),1)
 #bitmap("HR with Continuous Time_Years.tiff",width=140, height=100, units='mm',type='tifflzw',res=600)
 # For poster
 #bitmap("HRs with Continuous Time_Poster.tiff", width=14, height=7.5, units='in', type='tifflzw',res=600)
+
+#tiff(filename = "HR with Continuous Time_Years.tiff", width = 140, height = 100, units = "mm", res = 600, compression = "lzw")
 
 plot(continuous2[1], 
      ylim=c(-1.1, 1.1),
@@ -573,5 +586,20 @@ rmst2(mCRC$days, mCRC$event, mCRC$trt, tau = 1095)
 
 ```
 
+## Events Over Time
 
+```{r}
+
+mCRC %>% 
+  mutate(year_interval = cut(years, breaks = seq(0, ceiling(max(years)), by = 0.25), labels = FALSE),
+         year_interval_max = year_interval*0.25) %>% 
+  group_by(trt, year_interval_max) %>% 
+  summarize(n_event = sum(event == 1),
+            .groups = 'drop') %>% 
+  pivot_wider(names_from = trt,
+              values_from = n_event) %>% 
+  kbl() %>% 
+  kable_styling()
+
+```
 
