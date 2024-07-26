@@ -12,7 +12,7 @@ colorectal cancer. Files for data cleaning are not provided in this GitHub repos
 these two trials were stacked into one dataset. The following variables were created:
 
 1. trt: 1 = panitumumab + standard of care chemotherapy (SOCC), 0 = SOCC at randomization
-2. days: time from randomization to the event for censoring
+2. days: time from randomization to the event or censoring, whichever occurred first
 3. event: 1 = disease progression or death, 0 = censored
 
 The uploaded file is an R Markdown document that was also attached as supplemental material to the article.
